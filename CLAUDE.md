@@ -1,12 +1,15 @@
 # Teleprompter Truffaut: instrucciones para Claude
 
-Página estática (sin build). `index.html` tiene el teleprompter; `guiones.js` tiene los textos en `window.GUIONES`.
+Página estática (sin build). `index.html` tiene el teleprompter. `guiones.js` tiene el guion que se ve si nunca se subió ninguno (el último de la lista). `guiones/` guarda los guiones en `.json` listos para subir.
 No hace falta tocar `index.html` para agregar guiones.
 
 ## Cuando Nana pasa un texto nuevo
 
-1. Agregá un objeto nuevo **al final** de `window.GUIONES` en `guiones.js` (el último abre por defecto):
-   `{ title, es: [...], en: [...], fr: [[...], ...], it: [[...], ...] }`
+La página muestra un solo guion: el último que Nana subió con **Subir guion nuevo…** (en el selector del título). Por eso cada guion nuevo es un archivo `.json` que ella sube.
+
+1. Creá `guiones/<titulo-en-minusculas-con-guiones>.json` con un solo objeto (ver los ejemplos de esa carpeta):
+   `{ "title": ..., "es": [...], "en": [...], "fr": [[...], ...], "it": [[...], ...] }`
+   JSON válido: comillas dobles, sin comas al final. Al terminar, decile a Nana la ruta del archivo para que lo suba.
 2. `title`: el nombre que Nana le dé al texto.
 3. `es`: el texto de Nana tal como lo dijo. Solo corregí puntuación y errores claros de dictado, y avisale cuáles corregiste.
 4. `en`, `fr`, `it`: traducción natural, con el tono hablado y cercano de Nana, no literal. Los títulos de películas van con su nombre oficial en cada idioma (ej.: *La mariée était en noir*, *La sposa in nero*, *The Bride Wore Black*).
@@ -39,7 +42,7 @@ Escrita para alguien que habla español rioplatense:
 ## Verificar antes de terminar
 
 ```bash
-node -e "global.window={};require('./guiones.js');for(const g of window.GUIONES)for(const l of['fr','it'])g[l].forEach((b,n)=>{const c=b.map(x=>x.split('|').length);if(new Set(c).size>1)console.log('cortes distintos:',g.title,l,'frase',n+1,c)});console.log('ok')"
+node -e "const g=JSON.parse(require('fs').readFileSync(process.argv[1]));for(const l of['fr','it'])g[l].forEach((b,n)=>{const c=b.map(x=>x.split('|').length);if(new Set(c).size>1)console.log('cortes distintos:',l,'frase',n+1,c)});console.log('ok')" guiones/ARCHIVO.json
 ```
 
 Tiene que imprimir solo `ok`.

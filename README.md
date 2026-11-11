@@ -9,7 +9,8 @@ Es una página estática: no necesita servidor, base de datos ni instalar nada.
 | Archivo | Para qué sirve |
 |---|---|
 | `index.html` | El teleprompter (diseño y funcionamiento). |
-| `guiones.js` | Los textos. Acá se agregan los guiones nuevos. |
+| `guiones.js` | El guion que se ve si todavía no subiste ninguno. |
+| `guiones/` | Guiones en `.json`, listos para subir desde la página. |
 | `CLAUDE.md` | Instrucciones para que Claude Code agregue guiones con el formato correcto. |
 
 ## Probarlo en tu computadora
@@ -27,17 +28,24 @@ Cada vez que cambies un archivo del repo, la página se actualiza sola en un par
 
 **Alternativa sin GitHub:** entrá a app.netlify.com/drop y arrastrá la carpeta entera. Te da un link al instante.
 
-## Agregar un guion nuevo
+## Cambiar el guion
 
-**Con Claude Code (recomendado):** abrí la carpeta del repo y escribí, por ejemplo:
+La página muestra **un solo guion**: el último que subiste.
 
-> Agregá un guion nuevo que se llame "El último metro" con este texto: …
+1. Tocá el título del guion (arriba a la izquierda) y elegí **Subir guion nuevo…**
+2. Elegí el archivo `.json` del guion.
 
-Claude lee `CLAUDE.md`, traduce, arma la pronunciación y la IPA, y lo suma a `guiones.js`.
+El guion queda guardado solo en ese navegador (no hay servidor ni base de datos). Si abrís la página en otra computadora, o borrás los datos del navegador, vas a ver el guion por defecto de `guiones.js` hasta que subas uno.
 
-**A mano:** copiá uno de los bloques de `guiones.js`, cambiale el `title` y los textos, y pegalo al final de la lista. El último guion de la lista es el que abre por defecto. Los demás se eligen desde el título, arriba a la izquierda.
+**Armar el archivo con Claude Code (recomendado):** abrí la carpeta del repo y escribí, por ejemplo:
 
-**Desde la página:** el botón del lápiz (editar guion) permite cambiar el texto sin tocar archivos. Esos cambios se guardan solo en el navegador que estés usando, no en el repo.
+> Armá un guion nuevo que se llame "El último metro" con este texto: …
+
+Claude lee `CLAUDE.md`, traduce, arma la pronunciación y la IPA, y crea `guiones/el-ultimo-metro.json`. Ese es el archivo que subís.
+
+**A mano:** copiá uno de los `.json` de la carpeta `guiones/`, cambiale el `title` y los textos.
+
+**Desde la página:** el botón del lápiz (editar guion) permite cambiar el texto del guion actual. Esos cambios se guardan solo en el navegador.
 
 ## Atajos de teclado
 

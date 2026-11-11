@@ -91,6 +91,9 @@ input[type=range]:hover::-webkit-slider-thumb { background: var(--red); }
 input[type=range]:hover::-moz-range-thumb { background: var(--red); }
 .spacer { flex: 1; }
 .hint { font-size: 11px; color: var(--muted); }
+.toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 12; max-width: min(560px, calc(100% - 32px));
+  background: var(--ink); color: #fff; font-size: 13px; line-height: 1.45; padding: 10px 14px; }
+.toast.err { background: var(--red); }
 
 /* Escenario */
 .stage { position: relative; overflow-y: auto; scrollbar-width: none; }
@@ -150,7 +153,8 @@ textarea { font-family: var(--font-ipa); font-size: 14px; line-height: 1.55; col
   <header class="bar">
     <div class="doc">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
-      <h1 class="pick-wrap"><select id="pick" aria-label="Elegir guion"></select></h1>
+      <h1 class="pick-wrap"><select id="pick" aria-label="Guion"></select></h1>
+      <input type="file" id="upload" accept=".json,application/json" hidden>
     </div>
     <nav class="controls" aria-label="Controles">
       <div class="seg" role="group" aria-label="Idioma">
@@ -200,6 +204,7 @@ textarea { font-family: var(--font-ipa); font-size: 14px; line-height: 1.55; col
 </div>
 
 <div class="count" id="count" hidden>3</div>
+<div class="toast" id="toast" role="status" hidden></div>
 
 <div class="modal" id="modal" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="edH">
@@ -233,8 +238,9 @@ const store = {
 };
 const clone = o => JSON.parse(JSON.stringify(o));
 
-const st = Object.assign({ lang: "fr", pron: true, ipa: true, speed: 40, size: 44, mirror: false, cd: true, guion: null }, store.get("prefs", {}));
-let ORIGINAL = GUIONES.find(g => g.title === st.guion) || GUIONES[GUIONES.length - 1];
+const st = Object.assign({ lang: "fr", pron: true, ipa: true, speed: 40, size: 44, mirror: false, cd: true }, store.get("prefs", {}));
+/* Hay un solo guion: el último que se subió (guardado solo en este navegador) o, si nunca se subió nada, el último de guiones.js */
+let ORIGINAL = store.get("uploaded", null) || GUIONES[GUIONES.length - 1];
 let data = store.get("script:" + ORIGINAL.title, null) || clone(ORIGINAL);
 const save = () => store.set("prefs", st);
 
@@ -416,16 +422,77 @@ $("edReset").onclick = () => {
 };
 $("modal").addEventListener("keydown", e => { if (e.key === "Escape") $("modal").hidden = true; });
 
-/* Selector de guiones */
-GUIONES.forEach(g => { const o = document.createElement("option"); o.value = o.textContent = g.title; $("pick").appendChild(o); });
+/* Selector: muestra el guion actual y la opción de subir uno nuevo */
+const UPLOAD = "__upload__";
+function fillPick() {
+  const p = $("pick"); p.innerHTML = "";
+  [[ORIGINAL.title, ORIGINAL.title], [UPLOAD, "Subir guion nuevo…"]].forEach(([v, t]) => {
+    const o = document.createElement("option"); o.value = v; o.textContent = t; p.appendChild(o);
+  });
+  p.value = ORIGINAL.title;
+}
 $("pick").onchange = e => {
-  pause();
-  ORIGINAL = GUIONES.find(g => g.title === e.target.value) || ORIGINAL;
-  st.guion = ORIGINAL.title; save();
-  data = store.get("script:" + ORIGINAL.title, null) || clone(ORIGINAL);
-  render(); stage.scrollTop = 0; pos = 0; e.target.blur();
+  const wantsUpload = e.target.value === UPLOAD;
+  e.target.value = ORIGINAL.title; e.target.blur();
+  if (wantsUpload) { pause(); $("upload").value = ""; $("upload").click(); }
 };
 
+let toastT;
+function toast(msg, err) {
+  const t = $("toast"); t.textContent = msg; t.classList.toggle("err", !!err); t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, err ? 9000 : 3500);
+}
+
+/* Revisa que el archivo tenga el formato de guiones.js: { title, es, en, fr, it } */
+function checkGuion(g) {
+  if (Array.isArray(g)) g = g[g.length - 1];
+  if (!g || typeof g !== "object") throw new Error("El archivo no tiene un guion.");
+  if (typeof g.title !== "string" || !g.title.trim()) throw new Error("Falta el título (title).");
+  const out = { title: g.title.trim() };
+  for (const l of ["es", "en", "fr", "it"]) {
+    const arr = g[l] == null ? [] : g[l];
+    if (!Array.isArray(arr)) throw new Error(`"${l}" tiene que ser una lista de frases.`);
+    out[l] = arr.map((b, n) => {
+      if (l === "fr" || l === "it") {
+        const blk = Array.isArray(b) ? b : [b];
+        if (!blk.every(x => typeof x === "string")) throw new Error(`${l.toUpperCase()}, frase ${n + 1}: tiene que ser [texto, pronunciación, IPA].`);
+        return blk;
+      }
+      if (typeof b !== "string") throw new Error(`${l.toUpperCase()}, frase ${n + 1}: tiene que ser un texto.`);
+      return b;
+    });
+  }
+  if (!out.es.length && !out.en.length && !out.fr.length && !out.it.length) throw new Error("El guion está vacío.");
+  return out;
+}
+function cutWarnings(g) {
+  const w = [];
+  for (const l of ["fr", "it"]) g[l].forEach((b, n) => {
+    const c = b.map(x => x.split("|").length);
+    if (new Set(c).size > 1) w.push(`${l.toUpperCase()} frase ${n + 1}`);
+  });
+  return w;
+}
+
+$("upload").onchange = async e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  let g;
+  try {
+    const txt = await f.text();
+    let raw;
+    try { raw = JSON.parse(txt); }
+    catch { throw new Error("No es un archivo JSON válido. Pedile a Claude el guion en formato .json."); }
+    g = checkGuion(raw);
+  } catch (err) { toast("No pude cargar el guion: " + err.message, true); return; }
+  store.set("uploaded", g);
+  store.set("script:" + g.title, null);
+  ORIGINAL = g; data = clone(g);
+  fillPick(); render(); stage.scrollTop = 0; pos = 0;
+  const w = cutWarnings(g);
+  toast(w.length ? `Guion cargado: «${g.title}». Ojo, los cortes | no coinciden en: ${w.join(", ")}.` : `Guion cargado: «${g.title}».`, w.length > 0);
+};
+
+fillPick();
 placeGuide(); render();
 /* Recalcular guía, tamaños y resaltado cada vez que cambia el tamaño o terminan de cargar fuentes */
 const relayout = () => { placeGuide(); fit(); };
