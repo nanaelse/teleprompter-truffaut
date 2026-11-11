@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Teleprompter Truffaut</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital@1&family=Instrument+Serif&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Noto+Sans:wght@400&display=swap">
+<style>
+/* Layout: franja negra arriba, barra de controles crema, escenario a pantalla completa.
+   Cada fragmento ocupa UNA línea (se achica sola si no entra), con pronunciación (rosa) e IPA (rojo) debajo.
+   Estética inspirada en Rouje: crema cálido, tinta casi negra, serif condensada en mayúsculas, rojo como acento. */
+:root {
+  --cream: #fbf7f3;
+  --sand: #f2e9e0;
+  --rule: #e2e1e0;
+  --ink: #0f0f0f;
+  --text: #333333;
+  --muted: #8a8580;
+  /* Rosa y rojo: mismo tono-familia, MISMA saturación (85%) y misma opacidad (100%) */
+  --pink: hsl(340 85% 62%);
+  --red:  hsl(356 85% 41%);
+  --h: 32px; /* alto único para todos los botones */
+  --font-display: "Instrument Serif", "Didot", "Bodoni 72", Georgia, serif;
+  --font-ui: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-ipa: "Noto Sans", "Charis SIL", "Doulos SIL", "Lucida Sans Unicode", sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--cream); color: var(--text); font-family: var(--font-ui); overflow: hidden; -webkit-font-smoothing: antialiased; }
+.app { height: 100%; display: grid; grid-template-rows: auto 1fr auto; }
+
+/* Barra superior: logo a la izquierda, menú a la derecha */
+.bar, .foot {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px;
+  padding-left: max(20px, env(safe-area-inset-left, 0px));
+  padding-right: max(20px, env(safe-area-inset-right, 0px));
+  background: var(--cream);
+  transition: opacity .35s ease; position: relative; z-index: 5;
+}
+.bar { padding-block: 10px; border-bottom: 1px solid var(--rule); }
+.foot { padding-top: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--rule); }
+.app.playing.idle .bar, .app.playing.idle .foot { opacity: 0; pointer-events: none; }
+.doc { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--ink); }
+.doc svg { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.doc h1 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 24px; line-height: 1; text-transform: uppercase; letter-spacing: .005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.foot { justify-content: space-between; }
+.pick-wrap { position: relative; min-width: 0; }
+#pick { font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; background: transparent; border: 0;
+  -webkit-appearance: none; appearance: none; padding: 0 22px 0 0; cursor: pointer; max-width: 55vw; text-overflow: ellipsis;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 8px center, right 3px center; background-size: 5px 5px; background-repeat: no-repeat; }
+#pick option { font-family: var(--font-ui); text-transform: none; font-size: 15px; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.sep { width: 1px; height: 22px; background: var(--rule); }
+.group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ib { width: 38px; padding: 0; }
+.ib svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ib .fill { fill: currentColor; stroke: none; }
+.glyph { font-family: "Noto Serif", Georgia, serif; font-style: italic; font-size: 19px; line-height: 1; text-transform: none; letter-spacing: 0; font-weight: 400; padding-bottom: 2px; }
+.play svg { width: 12px; height: 12px; }
+button {
+  font-family: var(--font-ui); font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--ink); background: transparent; border: 1px solid var(--ink); border-radius: 0;
+  height: var(--h); padding: 0 12px; cursor: pointer; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+}
+button:hover { background: var(--sand); }
+button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+button:disabled { opacity: .3; cursor: not-allowed; background: transparent; color: var(--ink); }
+.seg { display: inline-flex; }
+.seg button + button { border-left: 0; }
+.play { background: var(--ink); color: #fff; }
+.play:hover { background: #2c2c2c; }
+.chip-pink[aria-pressed="true"] { background: var(--pink); border-color: var(--pink); color: #fff; }
+.chip-red[aria-pressed="true"] { background: var(--red); border-color: var(--red); color: #fff; }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+label.rng { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+label.rng output { color: var(--ink); font-variant-numeric: tabular-nums; min-width: 2.4em; }
+input[type=range] { -webkit-appearance: none; appearance: none; width: 120px; height: 24px; margin: 0; background: transparent; cursor: pointer; }
+input[type=range]::-webkit-slider-runnable-track { height: 1px; background: var(--ink); border: 0; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 3px; height: 16px; margin-top: -7.5px; background: var(--ink); border: 0; border-radius: 0; }
+input[type=range]::-moz-range-track { height: 1px; background: var(--ink); border: 0; }
+input[type=range]::-moz-range-progress { height: 1px; background: var(--ink); }
+input[type=range]::-moz-range-thumb { width: 3px; height: 16px; background: var(--ink); border: 0; border-radius: 0; }
+input[type=range]:hover::-webkit-slider-thumb { background: var(--red); }
+input[type=range]:hover::-moz-range-thumb { background: var(--red); }
+.spacer { flex: 1; }
+.hint { font-size: 11px; color: var(--muted); }
+
+/* Escenario */
+.stage { position: relative; overflow-y: auto; scrollbar-width: none; }
+.stage::-webkit-scrollbar { display: none; }
+.guide { position: fixed; left: 0; right: 0; height: 0; opacity: .7; pointer-events: none; z-index: 3; }
+.guide::before, .guide::after { content: ""; position: absolute; top: -7px; border: 7px solid transparent; }
+.guide::before { left: 8px; border-left-color: var(--red); }
+.guide::after { right: 8px; border-right-color: var(--red); }
+.fade-top, .fade-bot { position: fixed; left: 0; right: 0; height: 16vh; pointer-events: none; z-index: 2; }
+.fade-top { background: linear-gradient(var(--cream), rgba(251,247,243,0)); }
+.fade-bot { bottom: 0; background: linear-gradient(rgba(251,247,243,0), var(--cream)); }
+.script {
+  max-width: 1200px; margin: 0 auto;
+  padding-left: max(32px, env(safe-area-inset-left, 0px));
+  padding-right: max(32px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: .9em;
+  font-size: var(--size, 44px); text-align: center;
+}
+.script.mirror { transform: scaleX(-1); }
+.blk { opacity: .22; transition: opacity .25s; display: flex; flex-direction: column; gap: .18em; }
+.blk.active { opacity: 1; }
+.blk.sent-start { margin-top: .5em; }
+.ln { display: block; white-space: nowrap; }
+.t { font-family: var(--font-display); color: var(--ink); line-height: 1.15; }
+.p { font-family: var(--font-ui); font-style: italic; color: var(--pink); font-size: .5em; line-height: 1.3; letter-spacing: .01em; }
+.i { font-family: var(--font-ipa); color: var(--red); font-size: .44em; line-height: 1.35; }
+.hide-p .p, .hide-i .i { display: none; }
+.end { font-family: var(--font-display); text-transform: uppercase; font-size: .7em; color: var(--muted); margin-top: 1em; }
+
+/* Cuenta regresiva */
+.count { position: fixed; inset: 0; display: grid; place-items: center; z-index: 8;
+  background: rgba(251,247,243,.82); font-family: var(--font-display); font-size: min(42vw, 340px); color: var(--ink); }
+
+/* Editor */
+.modal { position: fixed; inset: 0; z-index: 10; background: rgba(15,15,15,.4); display: grid; place-items: center;
+  padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.sheet { width: min(880px, 100%); max-height: 100%; overflow: auto; background: var(--cream); border: 1px solid var(--ink);
+  padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+.sheet h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 40px; text-transform: uppercase; color: var(--ink); line-height: 1; }
+.sheet p { margin: 0; color: var(--text); font-size: 14px; line-height: 1.55; max-width: 70ch; }
+.sheet code { background: var(--sand); padding: 1px 5px; }
+.sheet input[type=text] { font: inherit; font-size: 14px; color: var(--ink); background: #fff; border: 1px solid var(--rule); padding: 9px 10px; flex: 1; min-width: 200px; }
+textarea { font-family: var(--font-ipa); font-size: 14px; line-height: 1.55; color: var(--ink); background: #fff;
+  border: 1px solid var(--rule); padding: 12px; min-height: 320px; resize: vertical; width: 100%; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.note { font-size: 12px; color: var(--red); }
+
+@media (max-width: 680px) {
+  input[type=range] { width: 70px; }
+  .doc h1 { font-size: 19px; }
+}
+@media (prefers-reduced-motion: reduce) { .blk, .bar, .foot { transition: none; } }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="bar">
+    <div class="doc">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
+      <h1 class="pick-wrap"><select id="pick" aria-label="Elegir guion"></select></h1>
+    </div>
+    <nav class="controls" aria-label="Controles">
+      <div class="seg" role="group" aria-label="Idioma">
+        <button data-lang="es">ES</button><button data-lang="en">EN</button><button data-lang="fr">FR</button><button data-lang="it">IT</button>
+      </div>
+      <div class="group">
+        <button id="tPron" class="ib chip-pink" aria-pressed="true" aria-label="Pronunciación" title="Pronunciación">
+          <svg viewBox="0 0 24 24"><path d="M5 21v-3.6C3.4 16.1 2.5 14.2 2.5 12A7.5 7.5 0 0 1 10 4.5c3.6 0 6.4 2.5 7 5.8l1.3 2.7h-1.8v2.5a2 2 0 0 1-2 2h-2V21"/><path d="M20 9a4.5 4.5 0 0 1 0 6" /><path d="M22.2 7a8 8 0 0 1 0 10"/></svg>
+        </button>
+        <button id="tIpa" class="ib chip-red glyph" aria-pressed="true" aria-label="Fonética IPA" title="Fonética IPA">ʒ</button>
+      </div>
+      <span class="sep"></span>
+      <button class="play" id="play" aria-label="Play" title="Play (espacio)"></button>
+    </nav>
+  </header>
+
+  <main class="stage" id="stage">
+    <div class="fade-top" id="fadeTop"></div>
+    <div class="guide" id="guide"></div>
+    <div class="script" id="script"></div>
+    <div class="fade-bot" id="fadeBot"></div>
+  </main>
+
+  <footer class="foot">
+      <div class="group" role="group" aria-label="Acciones">
+        <button id="restart" class="ib" aria-label="Volver al inicio" title="Volver al inicio (R)">
+          <svg viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><polyline points="3.5 3.5 3.5 8.5 8.5 8.5"/></svg>
+        </button>
+        <button id="mirror" class="ib" aria-pressed="false" aria-label="Espejo" title="Espejo (M)">
+          <svg viewBox="0 0 24 24"><line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="2 2.2"/><path d="M9 7 4 17h5z"/><path d="M15 7l5 10h-5z"/></svg>
+        </button>
+        <button id="cd" class="ib" aria-pressed="true" aria-label="Cuenta regresiva 3, 2, 1" title="Cuenta regresiva 3·2·1">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 10v3.8l2.6 1.8"/><path d="M10 2.5h4M12 2.5V6"/></svg>
+        </button>
+        <button id="fs" class="ib" aria-label="Pantalla completa" title="Pantalla completa (F)">
+          <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        </button>
+        <button id="edit" class="ib" aria-label="Editar guion" title="Editar guion">
+          <svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>
+        </button>
+      </div>
+    <div class="controls">
+      <label class="rng">Velocidad <input type="range" id="speed" min="10" max="200" step="5" value="40"><output id="speedOut">40</output></label>
+      <label class="rng">Tamaño <input type="range" id="size" min="24" max="110" step="2" value="44"><output id="sizeOut">44</output></label>
+    </div>
+  </footer>
+</div>
+
+<div class="count" id="count" hidden>3</div>
+
+<div class="modal" id="modal" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="edH">
+    <h2 id="edH">Editar guion</h2>
+    <p>Una frase por párrafo, separadas por una línea en blanco. Usá <code>|</code> para cortar la frase en líneas cortas. En francés e italiano cada párrafo tiene tres líneas (texto, pronunciación, fonética) y las tres llevan los mismos cortes <code>|</code>. Lo que guardes queda en este navegador.</p>
+    <div class="row"><input type="text" id="edTitle" aria-label="Título del episodio" placeholder="Título del episodio"></div>
+    <div class="seg" role="group" aria-label="Idioma a editar">
+      <button data-ed="es">Español</button><button data-ed="en">English</button><button data-ed="fr">Français</button><button data-ed="it">Italiano</button>
+    </div>
+    <textarea id="edText" spellcheck="false" aria-label="Texto del guion"></textarea>
+    <div class="row">
+      <button class="play" id="edSave">Guardar</button>
+      <button id="edCancel">Cancelar</button>
+      <span class="spacer"></span>
+      <button id="edReset">Volver al guion original</button>
+    </div>
+    <span class="note" id="edNote" hidden></span>
+  </div>
+</div>
+
+<script src="guiones.js"></script>
+<script>
+const GUIONES = (window.GUIONES && window.GUIONES.length) ? window.GUIONES
+  : [{ title: "Sin guion", es: ["No encontré guiones.js | al lado de index.html."], en: [], fr: [], it: [] }];
+
+const $ = id => document.getElementById(id);
+const KEY = "tp2:";
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(KEY + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(KEY + k, JSON.stringify(v)); } catch {} }
+};
+const clone = o => JSON.parse(JSON.stringify(o));
+
+const st = Object.assign({ lang: "fr", pron: true, ipa: true, speed: 40, size: 44, mirror: false, cd: true, guion: null }, store.get("prefs", {}));
+let ORIGINAL = GUIONES.find(g => g.title === st.guion) || GUIONES[GUIONES.length - 1];
+let data = store.get("script:" + ORIGINAL.title, null) || clone(ORIGINAL);
+const save = () => store.set("prefs", st);
+
+const app = $("app"), stage = $("stage"), script = $("script");
+let playing = false, pos = 0, last = null, raf = 0, counting = null, wake = null;
+
+const parts = s => String(s || "").split("|").map(x => x.trim());
+
+function render() {
+  $("pick").value = ORIGINAL.title;
+  script.innerHTML = "";
+  (data[st.lang] || []).forEach(sent => {
+    const lines = Array.isArray(sent) ? sent : [sent];
+    const T = parts(lines[0]), P = parts(lines[1]), I = parts(lines[2]);
+    const n = Math.max(T.length, P.length, I.length);
+    for (let k = 0; k < n; k++) {
+      const d = document.createElement("div"); d.className = "blk" + (k === 0 ? " sent-start" : "");
+      [["t", T[k]], ["p", P[k]], ["i", I[k]]].forEach(([c, txt]) => {
+        if (!txt) return;
+        const e = document.createElement("div"); e.className = "ln " + c; e.textContent = txt; d.appendChild(e);
+      });
+      script.appendChild(d);
+    }
+  });
+  const end = document.createElement("div"); end.className = "end"; end.textContent = "Fin"; script.appendChild(end);
+  applyUI();
+}
+
+/* Cada línea entra en UNA sola línea: si no entra, se achica sola */
+function fit() {
+  script.querySelectorAll(".ln").forEach(el => {
+    el.style.fontSize = "";
+    const w = el.clientWidth, sw = el.scrollWidth;
+    if (sw > w && w > 0) {
+      const fs = parseFloat(getComputedStyle(el).fontSize);
+      el.style.fontSize = (fs * w / sw * 0.97) + "px";
+    }
+  });
+  highlight();
+}
+
+function applyUI() {
+  document.querySelectorAll("[data-lang]").forEach(b => b.setAttribute("aria-pressed", b.dataset.lang === st.lang));
+  const phon = st.lang === "fr" || st.lang === "it";
+  $("tPron").disabled = $("tIpa").disabled = !phon;
+  $("tPron").setAttribute("aria-pressed", st.pron);
+  $("tIpa").setAttribute("aria-pressed", st.ipa);
+  script.classList.toggle("hide-p", !st.pron);
+  script.classList.toggle("hide-i", !st.ipa);
+  script.classList.toggle("mirror", st.mirror);
+  $("mirror").setAttribute("aria-pressed", st.mirror);
+  $("cd").setAttribute("aria-pressed", st.cd);
+  script.style.setProperty("--size", st.size + "px");
+  $("speed").value = st.speed; $("speedOut").textContent = st.speed;
+  $("size").value = st.size; $("sizeOut").textContent = st.size;
+  $("play").innerHTML = playing
+    ? '<svg viewBox="0 0 12 12"><rect fill="currentColor" x="2" y="1.5" width="2.6" height="9"/><rect fill="currentColor" x="7.4" y="1.5" width="2.6" height="9"/></svg>Pausa'
+    : '<svg viewBox="0 0 12 12"><path fill="currentColor" d="M2.5 1.2v9.6L10.5 6z"/></svg>Play';
+  $("play").setAttribute("aria-label", playing ? "Pausa" : "Play");
+  $("play").title = playing ? "Pausa (espacio)" : "Play (espacio)";
+  app.classList.toggle("playing", playing);
+  requestAnimationFrame(fit);
+}
+
+function placeGuide() {
+  const r = stage.getBoundingClientRect();
+  $("guide").style.top = (r.top + r.height * 0.42) + "px";
+  $("fadeTop").style.top = r.top + "px";
+  $("fadeBot").style.bottom = (window.innerHeight - r.bottom) + "px";
+  script.style.paddingTop = (r.height * 0.42) + "px";
+  script.style.paddingBottom = (r.height * 0.58) + "px";
+}
+
+function highlight() {
+  const sr = stage.getBoundingClientRect();
+  const gy = sr.top + sr.height * 0.42;
+  let best = null, bd = Infinity;
+  script.querySelectorAll(".blk").forEach(b => {
+    const r = b.getBoundingClientRect();
+    const d = gy < r.top ? r.top - gy : gy > r.bottom ? gy - r.bottom : 0;
+    if (d < bd) { bd = d; best = b; }
+    b.classList.remove("active");
+  });
+  if (best) best.classList.add("active");
+}
+
+function tick(t) {
+  if (!playing) return;
+  if (last != null) {
+    pos += st.speed * (t - last) / 1000;
+    const max = stage.scrollHeight - stage.clientHeight;
+    if (pos >= max) { pos = max; stage.scrollTop = pos; pause(); return; }
+    stage.scrollTop = pos;
+  }
+  last = t; raf = requestAnimationFrame(tick);
+}
+
+async function play() {
+  if (playing || counting) return;
+  if (st.cd) {
+    const el = $("count"); el.hidden = false; let n = 3; el.textContent = n;
+    await new Promise(res => { counting = setInterval(() => { n--; if (n <= 0) { clearInterval(counting); res(); } else el.textContent = n; }, 800); });
+    counting = null; el.hidden = true;
+  }
+  pos = stage.scrollTop; playing = true; last = null; applyUI(); idleSoon();
+  raf = requestAnimationFrame(tick);
+  try { wake = await navigator.wakeLock?.request("screen"); } catch {}
+}
+function pause() {
+  if (counting) { clearInterval(counting); counting = null; $("count").hidden = true; }
+  playing = false; cancelAnimationFrame(raf); applyUI(); app.classList.remove("idle");
+  try { wake?.release(); } catch {} wake = null;
+}
+const toggle = () => (playing || counting) ? pause() : play();
+
+let idleT;
+function idleSoon() { app.classList.remove("idle"); clearTimeout(idleT); if (playing) idleT = setTimeout(() => app.classList.add("idle"), 2000); }
+document.addEventListener("mousemove", idleSoon);
+document.addEventListener("touchstart", idleSoon, { passive: true });
+
+stage.addEventListener("scroll", () => { if (!playing) pos = stage.scrollTop; highlight(); });
+stage.addEventListener("click", toggle);
+window.addEventListener("resize", () => { placeGuide(); fit(); });
+
+function setLang(l) { st.lang = l; save(); render(); stage.scrollTop = 0; pos = 0; }
+document.querySelectorAll("[data-lang]").forEach(b => b.onclick = () => setLang(b.dataset.lang));
+$("tPron").onclick = () => { st.pron = !st.pron; save(); applyUI(); };
+$("tIpa").onclick = () => { st.ipa = !st.ipa; save(); applyUI(); };
+$("play").onclick = toggle;
+$("speed").oninput = e => { st.speed = +e.target.value; save(); applyUI(); };
+$("size").oninput = e => { st.size = +e.target.value; save(); applyUI(); };
+$("restart").onclick = () => { pause(); stage.scrollTop = 0; pos = 0; };
+$("mirror").onclick = () => { st.mirror = !st.mirror; save(); applyUI(); };
+$("cd").onclick = () => { st.cd = !st.cd; save(); applyUI(); };
+$("fs").onclick = async () => { try { document.fullscreenElement ? await document.exitFullscreen() : await document.documentElement.requestFullscreen(); } catch {} };
+
+document.addEventListener("keydown", e => {
+  if (!$("modal").hidden || e.target.matches("input, textarea")) return;
+  const k = e.key;
+  if (k === " ") { e.preventDefault(); toggle(); }
+  else if (k === "ArrowUp") { e.preventDefault(); st.speed = Math.min(200, st.speed + 5); save(); applyUI(); }
+  else if (k === "ArrowDown") { e.preventDefault(); st.speed = Math.max(10, st.speed - 5); save(); applyUI(); }
+  else if (k === "+" || k === "=") { st.size = Math.min(110, st.size + 4); save(); applyUI(); }
+  else if (k === "-") { st.size = Math.max(24, st.size - 4); save(); applyUI(); }
+  else if (k === "r" || k === "R") $("restart").click();
+  else if (k === "m" || k === "M") $("mirror").click();
+  else if (k === "f" || k === "F") $("fs").click();
+  else if (k.length === 1 && "1234".includes(k)) setLang(["es", "en", "fr", "it"][+k - 1]);
+});
+
+/* Editor */
+let draft, edLang = null;
+const toText = arr => (arr || []).map(b => Array.isArray(b) ? b.join("\n") : b).join("\n\n");
+const fromText = (l, txt) => txt.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean)
+  .map(s => (l === "fr" || l === "it") ? s.split("\n").map(x => x.trim()) : s.replace(/\n/g, " "));
+function edShow(l) {
+  if (draft && edLang) draft[edLang] = $("edText").value;
+  edLang = l;
+  document.querySelectorAll("[data-ed]").forEach(b => b.setAttribute("aria-pressed", b.dataset.ed === l));
+  $("edText").value = draft[l];
+}
+const toDraft = o => ({ es: toText(o.es), en: toText(o.en), fr: toText(o.fr), it: toText(o.it) });
+$("edit").onclick = () => {
+  pause(); draft = toDraft(data);
+  $("edTitle").value = data.title || ""; $("edNote").hidden = true;
+  edLang = null; edShow(st.lang); $("modal").hidden = false; $("edText").focus();
+};
+document.querySelectorAll("[data-ed]").forEach(b => b.onclick = () => edShow(b.dataset.ed));
+$("edCancel").onclick = () => { $("modal").hidden = true; };
+$("edSave").onclick = () => {
+  draft[edLang] = $("edText").value;
+  data = { title: $("edTitle").value.trim() || "Sin título" };
+  ["es", "en", "fr", "it"].forEach(l => data[l] = fromText(l, draft[l]));
+  store.set("script:" + ORIGINAL.title, data); $("modal").hidden = true; render(); stage.scrollTop = 0; pos = 0;
+};
+$("edReset").onclick = () => {
+  draft = toDraft(ORIGINAL); $("edTitle").value = ORIGINAL.title; edLang = null; edShow("es");
+  $("edNote").textContent = "Cargué el guion original. Tocá Guardar para aplicarlo."; $("edNote").hidden = false;
+};
+$("modal").addEventListener("keydown", e => { if (e.key === "Escape") $("modal").hidden = true; });
+
+/* Selector de guiones */
+GUIONES.forEach(g => { const o = document.createElement("option"); o.value = o.textContent = g.title; $("pick").appendChild(o); });
+$("pick").onchange = e => {
+  pause();
+  ORIGINAL = GUIONES.find(g => g.title === e.target.value) || ORIGINAL;
+  st.guion = ORIGINAL.title; save();
+  data = store.get("script:" + ORIGINAL.title, null) || clone(ORIGINAL);
+  render(); stage.scrollTop = 0; pos = 0; e.target.blur();
+};
+
+placeGuide(); render();
+/* Recalcular guía, tamaños y resaltado cada vez que cambia el tamaño o terminan de cargar fuentes */
+const relayout = () => { placeGuide(); fit(); };
+if (window.ResizeObserver) new ResizeObserver(relayout).observe(stage);
+window.addEventListener("load", relayout);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) relayout(); });
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(relayout);
+setTimeout(relayout, 300); setTimeout(relayout, 1200);
+</script>
+</body>
+</html>
